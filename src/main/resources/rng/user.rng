@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+
+    <start>
+        <ref name="user"/>
+    </start>
+
+    <define name="user">
+        <element name="user">
+            <element name="id">
+                <data type="string"/>
+            </element>
+            <element name="name">
+                <data type="string"/>
+            </element>
+            <element name="redId">
+                <data type="string"/>
+            </element>
+            <optional>
+                <element name="followersCount">
+                    <data type="int"/>
+                </element>
+            </optional>
+            <optional>
+                <element name="notesCount">
+                    <data type="int"/>
+                </element>
+            </optional>
+            <optional>
+                <element name="verified">
+                    <data type="boolean"/>
+                </element>
+            </optional>
+        </element>
+    </define>
+
+</grammar>

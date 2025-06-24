@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+    <xs:element name="user" type="UserType"/>
+
+    <xs:complexType name="UserType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="redId" type="xs:string"/>
+            <xs:element name="followersCount" type="xs:int" minOccurs="0"/>
+            <xs:element name="notesCount" type="xs:int" minOccurs="0"/>
+            <xs:element name="verified" type="xs:boolean" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>
