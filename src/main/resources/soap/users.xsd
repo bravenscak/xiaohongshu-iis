@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://xiaohongshuiis.algebra.hr/soap"
+           xmlns:tns="http://xiaohongshuiis.algebra.hr/soap"
+           elementFormDefault="qualified">
+
+    <xs:element name="searchUsersRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="searchTerm" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="searchUsersResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="results" type="tns:SearchResults"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="SearchResults">
+        <xs:sequence>
+            <xs:element name="user" type="xs:string" maxOccurs="unbounded" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>
