@@ -42,10 +42,4 @@ public class WebController {
         model.addAttribute("title", "Upravljanje korisnicima");
         return "users";
     }
-
-    @GetMapping("/xml-generator")
-    public String xmlGenerator(Model model) {
-        model.addAttribute("title", "XML Generator");
-        return "xml-generator";
-    }
 }
