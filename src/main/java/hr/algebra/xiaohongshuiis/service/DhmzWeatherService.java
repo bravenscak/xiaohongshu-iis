@@ -58,7 +58,14 @@ public class DhmzWeatherService {
             }
 
         } catch (Exception e) {
-            throw new RuntimeException("Error fetching weather data: " + e.getMessage());
+            System.err.println("DHMZ XML parsing error: " + e.getMessage());
+
+            WeatherData fallback = new WeatherData();
+            fallback.setCityName(cityName + " (DHMZ trenutno nedostupan)");
+            fallback.setTemperature("Podaci nedostupni");
+            fallback.setHumidity("Podaci nedostupni");
+            fallback.setPressure("Podaci nedostupni");
+            results.add(fallback);
         }
 
         return results;
