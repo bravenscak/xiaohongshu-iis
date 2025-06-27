@@ -31,10 +31,14 @@ public class WebController {
         return "weather";
     }
 
-    @GetMapping("/auth")
-    public String auth(Model model) {
-        model.addAttribute("title", "Autentifikacija");
-        return "auth";
+    @GetMapping("/login")
+    public String login() {
+        return "login";
+    }
+
+    @GetMapping("/register")
+    public String register() {
+        return "register";
     }
 
     @GetMapping("/users")
