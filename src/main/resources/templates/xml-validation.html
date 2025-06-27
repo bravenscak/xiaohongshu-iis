@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="hr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML Validacija - Xiaohongshu IIS</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet">
+
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            transition: border-color 0.3s;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #0d6efd;
+        }
+        .upload-area.dragover {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+        .validation-result {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .xml-preview {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .xml-error-line {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding-left: 8px;
+            margin: 2px 0;
+        }
+        .xml-line-number {
+            color: #6c757d;
+            margin-right: 10px;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="/">
+            Xiaohongshu IIS
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/"><i class="bi bi-house"></i> Dashboard</a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-code-square"></i> XML Servisi
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item active" href="/xml-validation">
+                            <i class="bi bi-check-circle"></i> XML Validacija
+                        </a></li>
+                        <li><a class="dropdown-item" href="/soap-search">
+                            <i class="bi bi-search"></i> SOAP Pretraživanje
+                        </a></li>
+                        <li><a class="dropdown-item" href="/xml-generator">
+                            <i class="bi bi-file-code"></i> XML Generator
+                        </a></li>
+                    </ul>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/weather">
+                        <i class="bi bi-cloud-sun"></i> Vrijeme
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/users">
+                        <i class="bi bi-people"></i> Korisnici
+                    </a>
+                </li>
+            </ul>
+
+            <ul class="navbar-nav">
+                <li class="nav-item" id="auth-section">
+                    <a class="nav-link" href="/auth">
+                        <i class="bi bi-box-arrow-in-right"></i> Prijava
+                    </a>
+                </li>
+                <li class="nav-item d-none" id="user-section">
+                    <div class="dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person"></i> <span id="username"></span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="logout()">
+                                <i class="bi bi-box-arrow-right"></i> Odjava
+                            </a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<main class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-6 fw-bold">XML Validacija</h1>
+            <p class="lead text-muted">Testiraj validaciju XML dokumenata pomoću XSD ili RNG shema</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-upload"></i> Upload XML datoteke</h5>
+                </div>
+                <div class="card-body">
+                    <div class="upload-area" id="uploadArea">
+                        <i class="bi bi-cloud-upload" style="font-size: 3rem; color: #6c757d;"></i>
+                        <h6 class="mt-3">Povuci XML datoteku ovdje ili klikni za odabir</h6>
+                        <p class="text-muted small">Podržani formati: .xml</p>
+                        <input type="file" id="xmlFile" accept=".xml" style="display: none;">
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label"><strong>Tip validacije:</strong></label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="validationType" id="xsd" value="xsd" checked>
+                            <label class="btn btn-outline-primary" for="xsd">
+                                <i class="bi bi-check-circle"></i> XSD Validacija
+                            </label>
+
+                            <input type="radio" class="btn-check" name="validationType" id="rng" value="rng">
+                            <label class="btn btn-outline-primary" for="rng">
+                                <i class="bi bi-check-circle"></i> RNG Validacija
+                            </label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary w-100 mt-3" id="validateBtn" disabled>
+                        <i class="bi bi-play-circle"></i> Pokreni validaciju
+                    </button>
+                </div>
+            </div>
+
+            <div class="card mt-4" id="xmlPreviewCard" style="display: none;">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-file-code"></i> XML Sadržaj</h6>
+                </div>
+                <div class="card-body">
+                    <div class="xml-preview" id="xmlPreview"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Rezultat validacije</h5>
+                </div>
+                <div class="card-body">
+                    <div id="validationResult">
+                        <div class="text-center text-muted py-5">
+                            <i class="bi bi-hourglass-split" style="font-size: 3rem;"></i>
+                            <p class="mt-3">Učitaj XML datoteku za početak validacije</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+<script>
+    let accessToken = localStorage.getItem('accessToken');
+    let refreshToken = localStorage.getItem('refreshToken');
+    let currentXmlContent = '';
+
+    function updateAuthUI() {
+        if (accessToken) {
+            $('#auth-section').addClass('d-none');
+            $('#user-section').removeClass('d-none');
+
+            try {
+                const payload = JSON.parse(atob(accessToken.split('.')[1]));
+                $('#username').text(payload.sub || 'Korisnik');
+            } catch (e) {
+                console.error('Error parsing token:', e);
+            }
+        } else {
+            $('#auth-section').removeClass('d-none');
+            $('#user-section').addClass('d-none');
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        accessToken = null;
+        refreshToken = null;
+        updateAuthUI();
+        toastr.success('Uspješno ste se odjavili');
+        window.location.href = '/';
+    }
+
+    const uploadArea = document.getElementById('uploadArea');
+    const xmlFile = document.getElementById('xmlFile');
+    const validateBtn = document.getElementById('validateBtn');
+    const xmlPreviewCard = document.getElementById('xmlPreviewCard');
+    const xmlPreview = document.getElementById('xmlPreview');
+    const validationResult = document.getElementById('validationResult');
+
+    uploadArea.addEventListener('click', () => xmlFile.click());
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    });
+
+    xmlFile.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFile(e.target.files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        if (!file.name.toLowerCase().endsWith('.xml')) {
+            toastr.error('Molimo odaberite XML datoteku');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentXmlContent = e.target.result;
+            displayXmlPreview(currentXmlContent);
+            validateBtn.disabled = false;
+            toastr.success('XML datoteka učitana');
+        };
+        reader.readAsText(file);
+    }
+
+    function displayXmlPreview(xmlContent) {
+        const lines = xmlContent.split('\n');
+        let numberedXml = lines.map((line, index) =>
+            `<span class="xml-line-number">${(index + 1).toString().padStart(2, '0')}:</span>${escapeHtml(line)}`
+        ).join('\n');
+
+        xmlPreview.innerHTML = numberedXml;
+        xmlPreviewCard.style.display = 'block';
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    validateBtn.addEventListener('click', () => {
+        if (!currentXmlContent) {
+            toastr.error('Nema XML sadržaja za validaciju');
+            return;
+        }
+
+        const validationType = document.querySelector('input[name="validationType"]:checked').value;
+        performValidation(currentXmlContent, validationType);
+    });
+
+    function performValidation(xmlContent, type) {
+        validateBtn.disabled = true;
+        validationResult.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Validira se...</span>
+                </div>
+                <p class="mt-2">Validira se XML...</p>
+            </div>
+        `;
+
+        const endpoint = type === 'xsd' ? '/api/users/xml' : '/api/users/xml-rng';
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/xml'
+            },
+            body: xmlContent
+        })
+            .then(response => response.json())
+            .then(data => {
+                validateBtn.disabled = false;
+                if (data.errors && data.errors.length > 0) {
+                    showValidationErrors(data.errors);
+                } else if (data.error) {
+                    showValidationErrors([data.error]);
+                } else {
+                    showValidationSuccess(data);
+                }
+            })
+            .catch(error => {
+                validateBtn.disabled = false;
+                console.error('Validation error:', error);
+                toastr.error('Greška prilikom validacije');
+                showValidationErrors(['Greška prilikom validacije: ' + error.message]);
+            });
+    }
+
+    function showValidationSuccess(data) {
+        validationResult.innerHTML = `
+            <div class="alert alert-success">
+                <h6><i class="bi bi-check-circle"></i> Validacija uspješna!</h6>
+                <p class="mb-0">XML dokument je valjan i uspješno je spremljen.</p>
+            </div>
+            <div class="mt-3">
+                <h6>Spremljeni korisnik:</h6>
+                <div class="bg-light p-3 rounded">
+                    <strong>ID:</strong> ${data.id || 'N/A'}<br>
+                    <strong>Ime:</strong> ${data.name || 'N/A'}<br>
+                    <strong>Red ID:</strong> ${data.redId || 'N/A'}<br>
+                    <strong>Pratitelji:</strong> ${data.followersCount || 0}<br>
+                    <strong>Bilješke:</strong> ${data.notesCount || 0}<br>
+                    <strong>Verificiran:</strong> ${data.verified ? 'Da' : 'Ne'}
+                </div>
+            </div>
+        `;
+        toastr.success('XML uspješno validiran!');
+    }
+
+    function showValidationErrors(errors) {
+        let improvedErrors = errors.map(error => improveErrorMessage(error));
+
+        const errorsList = improvedErrors.map(error => `<li>${error}</li>`).join('');
+        validationResult.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="bi bi-x-circle"></i> Validacija neuspješna</h6>
+                <p>Pronađene su sljedeće greške:</p>
+                <ul class="mb-0">
+                    ${errorsList}
+                </ul>
+            </div>
+        `;
+
+        highlightErrorsInXml(errors);
+
+        toastr.error('Validacija neuspješna');
+    }
+
+    function improveErrorMessage(error) {
+        if (error.includes('cvc-complex-type.2.4.a')) {
+            const elementMatch = error.match(/element '(\w+)'/);
+            const expectedMatch = error.match(/One of '(\w+)' is expected/);
+            if (elementMatch && expectedMatch) {
+                return `<strong>Nepoznati element:</strong> '${elementMatch[1]}' nije dozvoljen. Očekuje se '${expectedMatch[1]}'.`;
+            }
+        }
+
+        if (error.includes('cvc-complex-type.2.4.d')) {
+            return `<strong>Nevažeći sadržaj:</strong> Element sadrži neočekivane podatke ili elemente.`;
+        }
+
+        if (error.includes('cvc-type.3.1.3')) {
+            const valueMatch = error.match(/value '([^']+)'/);
+            if (valueMatch) {
+                return `<strong>Nevažeća vrijednost:</strong> '${valueMatch[1]}' nije valjana za ovaj tip podatka.`;
+            }
+        }
+
+        if (error === 'RNG Validation failed') {
+            return `<strong>RNG Validacija neuspješna:</strong> XML struktura ne odgovara RelaxNG shemi. Provjerite redoslijed elemenata i tipove podataka.`;
+        }
+
+        if (error === 'RNG Schema loading failed') {
+            return `<strong>Greška sheme:</strong> RNG shema se nije mogla učitati. Provjerite backend konfiguraciju.`;
+        }
+
+        return error;
+    }
+
+    function highlightErrorsInXml(errors) {
+        errors.forEach(error => {
+            const elementMatch = error.match(/element '(\w+)'/);
+            if (elementMatch) {
+                const elementName = elementMatch[1];
+                highlightElementInXml(elementName);
+            }
+        });
+    }
+
+    function highlightElementInXml(elementName) {
+        const xmlPreviewContent = xmlPreview.innerHTML;
+        const lines = xmlPreviewContent.split('\n');
+
+        const updatedLines = lines.map(line => {
+            if (line.includes(`<${elementName}`) || line.includes(`</${elementName}`)) {
+                return `<div class="xml-error-line">${line}</div>`;
+            }
+            return line;
+        });
+
+        xmlPreview.innerHTML = updatedLines.join('\n');
+    }
+
+    toastr.options = {
+        "closeButton": true,
+        "progressBar": true,
+        "positionClass": "toast-top-right",
+        "timeOut": "5000"
+    };
+
+    $(document).ready(function() {
+        updateAuthUI();
+    });
+</script>
+</body>
+</html>
