@@ -2,11 +2,13 @@ package hr.algebra.xiaohongshuiis.controller;
 
 import hr.algebra.xiaohongshuiis.model.User;
 import hr.algebra.xiaohongshuiis.repository.UserRepository;
+import hr.algebra.xiaohongshuiis.service.XiaohongshuService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -16,9 +18,27 @@ public class UserRestController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private XiaohongshuService xiaohongshuService;
+
     @GetMapping
     public List<User> getAllUsers() {
-        return userRepository.findAll();
+        List<User> users = userRepository.findAll();
+
+        if (users.isEmpty()) {
+            try {
+                users = xiaohongshuService.searchUsers("momo");
+
+                if (!users.isEmpty()) {
+                    userRepository.saveAll(users);
+                    System.out.println("Saved " + users.size() + " users from API to database");
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to fetch users from API: " + e.getMessage());
+            }
+        }
+
+        return users;
     }
 
     @GetMapping("/{id}")
@@ -59,6 +79,31 @@ public class UserRestController {
             return ResponseEntity.ok().build();
         } else {
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/fetch-from-api")
+    public ResponseEntity<?> fetchUsersFromApi(@RequestParam(defaultValue = "momo") String keyword) {
+        try {
+            List<User> apiUsers = xiaohongshuService.searchUsers(keyword);
+
+            if (!apiUsers.isEmpty()) {
+                userRepository.saveAll(apiUsers);
+                return ResponseEntity.ok(Map.of(
+                        "message", "Successfully fetched and saved users from API",
+                        "count", apiUsers.size(),
+                        "keyword", keyword
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "message", "No users found for keyword: " + keyword,
+                        "count", 0
+                ));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Failed to fetch users from API: " + e.getMessage()
+            ));
         }
     }
 }

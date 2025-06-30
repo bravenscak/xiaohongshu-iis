@@ -72,6 +72,14 @@
       </div>
     </div>
 
+    <div class="row mb-4">
+      <div class="col">
+        <button class="btn btn-outline-success" id="fetchFromApiBtn">
+          <i class="bi bi-cloud-download"></i> Dohvati iz API-ja
+        </button>
+      </div>
+    </div>
+
     <div id="usersContainer">
       <div class="text-center py-5">
         <div class="spinner-border text-primary" role="status">
@@ -520,6 +528,45 @@
   function escapeForJs(text) {
     return text.replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r');
   }
+
+  function fetchUsersFromApi() {
+    const fetchBtn = document.getElementById('fetchFromApiBtn');
+    if (fetchBtn) {
+      fetchBtn.disabled = true;
+      fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Dohvaćam...';
+
+      makeAuthenticatedRequest('/rest/users/fetch-from-api?keyword=momo', {
+        method: 'POST'
+      })
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error('Greška prilikom dohvaćanja iz API-ja');
+                }
+                return response.json();
+              })
+              .then(data => {
+                toastr.success(`Uspješno dohvaćeno ${data.count} korisnika iz API-ja`);
+                loadUsers();
+              })
+              .catch(error => {
+                console.error('Error fetching from API:', error);
+                toastr.error('Greška prilikom dohvaćanja iz API-ja');
+              })
+              .finally(() => {
+                fetchBtn.disabled = false;
+                fetchBtn.innerHTML = '<i class="bi bi-cloud-download"></i> Dohvati iz API-ja';
+              });
+    }
+  }
+
+  $(document).ready(function() {
+    updateAuthUI();
+
+    const fetchBtn = document.getElementById('fetchFromApiBtn');
+    if (fetchBtn) {
+      fetchBtn.addEventListener('click', fetchUsersFromApi);
+    }
+  });
 
   toastr.options = {
     "closeButton": true,
