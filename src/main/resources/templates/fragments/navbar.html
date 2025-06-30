@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="hr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark" th:fragment="navbar(activePage)">
+    <div class="container">
+        <a class="navbar-brand" href="/">
+            Xiaohongshu IIS
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle"
+                       th:classappend="${activePage == 'xml-validation' || activePage == 'soap-search'} ? 'active' : ''"
+                       href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-code-square"></i> XML Servisi
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item"
+                               th:classappend="${activePage == 'xml-validation'} ? 'active' : ''"
+                               href="/xml-validation">
+                            <i class="bi bi-check-circle"></i> XML Validacija
+                        </a></li>
+                        <li><a class="dropdown-item"
+                               th:classappend="${activePage == 'soap-search'} ? 'active' : ''"
+                               href="/soap-search">
+                            <i class="bi bi-search"></i> SOAP Pretraživanje
+                        </a></li>
+                    </ul>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:classappend="${activePage == 'weather'} ? 'active' : ''" href="/weather">
+                        <i class="bi bi-cloud-sun"></i> Vrijeme
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:classappend="${activePage == 'users'} ? 'active' : ''" href="/users">
+                        <i class="bi bi-people"></i> Korisnici
+                    </a>
+                </li>
+            </ul>
+
+            <ul class="navbar-nav">
+                <li class="nav-item" id="auth-section">
+                    <a class="nav-link" href="/login">
+                        <i class="bi bi-box-arrow-in-right"></i> Prijava
+                    </a>
+                </li>
+                <li class="nav-item d-none" id="user-section">
+                    <div class="dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person"></i> <span id="username"></span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="logout()">
+                                <i class="bi bi-box-arrow-right"></i> Odjava
+                            </a></li>
+                        </ul>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+</body>
+</html>

@@ -28,10 +28,6 @@
             border-color: #0d6efd;
             background-color: #f8f9fa;
         }
-        .validation-result {
-            max-height: 300px;
-            overflow-y: auto;
-        }
         .xml-preview {
             background-color: #f8f9fa;
             border-radius: 6px;
@@ -57,68 +53,7 @@
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container">
-        <a class="navbar-brand" href="/">
-            Xiaohongshu IIS
-        </a>
-
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="/"><i class="bi bi-house"></i> Dashboard</a>
-                </li>
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-code-square"></i> XML Servisi
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item active" href="/xml-validation">
-                            <i class="bi bi-check-circle"></i> XML Validacija
-                        </a></li>
-                        <li><a class="dropdown-item" href="/soap-search">
-                            <i class="bi bi-search"></i> SOAP Pretraživanje
-                        </a></li>
-                    </ul>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/weather">
-                        <i class="bi bi-cloud-sun"></i> Vrijeme
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/users">
-                        <i class="bi bi-people"></i> Korisnici
-                    </a>
-                </li>
-            </ul>
-
-            <ul class="navbar-nav">
-                <li class="nav-item" id="auth-section">
-                    <a class="nav-link" href="/login">
-                        <i class="bi bi-box-arrow-in-right"></i> Prijava
-                    </a>
-                </li>
-                <li class="nav-item d-none" id="user-section">
-                    <div class="dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person"></i> <span id="username"></span>
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="#" onclick="logout()">
-                                <i class="bi bi-box-arrow-right"></i> Odjava
-                            </a></li>
-                        </ul>
-                    </div>
-                </li>
-            </ul>
-        </div>
-    </div>
-</nav>
+<div th:replace="~{fragments/navbar :: navbar('xml-validation')}"></div>
 
 <main class="container mt-4">
     <div class="row mb-4">
@@ -187,7 +122,6 @@
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 </main>
@@ -203,19 +137,92 @@
 
     function updateAuthUI() {
         if (accessToken) {
-            $('#auth-section').addClass('d-none');
-            $('#user-section').removeClass('d-none');
-
-            try {
-                const payload = JSON.parse(atob(accessToken.split('.')[1]));
-                $('#username').text(payload.sub || 'Korisnik');
-            } catch (e) {
-                console.error('Error parsing token:', e);
-            }
+            validateToken().then(isValid => {
+                if (isValid) {
+                    showAuthenticatedState();
+                } else {
+                    attemptTokenRefresh().then(refreshed => {
+                        if (refreshed) {
+                            showAuthenticatedState();
+                        } else {
+                            showUnauthenticatedState();
+                        }
+                    });
+                }
+            });
         } else {
-            $('#auth-section').removeClass('d-none');
-            $('#user-section').addClass('d-none');
+            showUnauthenticatedState();
         }
+    }
+
+    function showAuthenticatedState() {
+        $('#auth-section').addClass('d-none');
+        $('#user-section').removeClass('d-none');
+
+        try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            $('#username').text(payload.sub || 'Korisnik');
+        } catch (e) {
+            console.error('Error parsing token:', e);
+            logout();
+        }
+    }
+
+    function showUnauthenticatedState() {
+        $('#auth-section').removeClass('d-none');
+        $('#user-section').addClass('d-none');
+    }
+
+    function validateToken() {
+        if (!accessToken) return Promise.resolve(false);
+
+        try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            const now = Date.now() / 1000;
+            if (payload.exp < now) {
+                return Promise.resolve(false);
+            }
+        } catch (e) {
+            return Promise.resolve(false);
+        }
+
+        return fetch('/rest/users', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        })
+            .then(response => response.ok)
+            .catch(() => false);
+    }
+
+    function attemptTokenRefresh() {
+        if (!refreshToken) {
+            return Promise.resolve(false);
+        }
+
+        return fetch('/auth/refreshToken', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ token: refreshToken })
+        })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Refresh failed');
+            })
+            .then(data => {
+                accessToken = data.accessToken;
+                localStorage.setItem('accessToken', accessToken);
+                return true;
+            })
+            .catch(() => {
+                refreshToken = null;
+                localStorage.removeItem('refreshToken');
+                return false;
+            });
     }
 
     function logout() {
@@ -223,9 +230,13 @@
         localStorage.removeItem('refreshToken');
         accessToken = null;
         refreshToken = null;
-        updateAuthUI();
-        toastr.success('Uspješno ste se odjavili');
-        window.location.href = '/';
+        showUnauthenticatedState();
+
+        if (window.location.pathname === '/users') {
+            window.location.href = '/login';
+        } else {
+            toastr.success('Uspješno ste se odjavili');
+        }
     }
 
     const uploadArea = document.getElementById('uploadArea');
@@ -306,13 +317,13 @@
     function performValidation(xmlContent, type) {
         validateBtn.disabled = true;
         validationResult.innerHTML = `
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Validira se...</span>
-                </div>
-                <p class="mt-2">Validira se XML...</p>
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Validira se...</span>
             </div>
-        `;
+            <p class="mt-2">Validira se XML...</p>
+        </div>
+    `;
 
         const endpoint = type === 'xsd' ? '/api/users/xml' : '/api/users/xml-rng';
 
@@ -345,22 +356,22 @@
     function showValidationSuccess(data) {
         resetXmlHighlighting();
         validationResult.innerHTML = `
-            <div class="alert alert-success">
-                <h6><i class="bi bi-check-circle"></i> Validacija uspješna!</h6>
-                <p class="mb-0">XML dokument je valjan i uspješno je spremljen.</p>
+        <div class="alert alert-success">
+            <h6><i class="bi bi-check-circle"></i> Validacija uspješna!</h6>
+            <p class="mb-0">XML dokument je valjan i uspješno je spremljen.</p>
+        </div>
+        <div class="mt-3">
+            <h6>Spremljeni korisnik:</h6>
+            <div class="bg-light p-3 rounded">
+                <strong>ID:</strong> ${data.id || 'N/A'}<br>
+                <strong>Ime:</strong> ${data.name || 'N/A'}<br>
+                <strong>Red ID:</strong> ${data.redId || 'N/A'}<br>
+                <strong>Pratitelji:</strong> ${data.followersCount || 0}<br>
+                <strong>Bilješke:</strong> ${data.notesCount || 0}<br>
+                <strong>Verificiran:</strong> ${data.verified ? 'Da' : 'Ne'}
             </div>
-            <div class="mt-3">
-                <h6>Spremljeni korisnik:</h6>
-                <div class="bg-light p-3 rounded">
-                    <strong>ID:</strong> ${data.id || 'N/A'}<br>
-                    <strong>Ime:</strong> ${data.name || 'N/A'}<br>
-                    <strong>Red ID:</strong> ${data.redId || 'N/A'}<br>
-                    <strong>Pratitelji:</strong> ${data.followersCount || 0}<br>
-                    <strong>Bilješke:</strong> ${data.notesCount || 0}<br>
-                    <strong>Verificiran:</strong> ${data.verified ? 'Da' : 'Ne'}
-                </div>
-            </div>
-        `;
+        </div>
+    `;
         toastr.success('XML uspješno validiran!');
     }
 
@@ -370,14 +381,14 @@
 
         const errorsList = improvedErrors.map(error => `<li>${error}</li>`).join('');
         validationResult.innerHTML = `
-            <div class="alert alert-danger">
-                <h6><i class="bi bi-x-circle"></i> Validacija neuspješna</h6>
-                <p>Pronađene su sljedeće greške:</p>
-                <ul class="mb-0">
-                    ${errorsList}
-                </ul>
-            </div>
-        `;
+        <div class="alert alert-danger">
+            <h6><i class="bi bi-x-circle"></i> Validacija neuspješna</h6>
+            <p>Pronađene su sljedeće greške:</p>
+            <ul class="mb-0">
+                ${errorsList}
+            </ul>
+        </div>
+    `;
 
         highlightErrorsInXml(errorDetails);
         toastr.error('Validacija neuspješna');

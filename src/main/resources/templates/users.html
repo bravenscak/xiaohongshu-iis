@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="hr" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REST API Korisnici - Xiaohongshu IIS</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet">
+
+  <style>
+    .navbar-brand {
+      font-weight: bold;
+    }
+    .user-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+      border: 1px solid #e0e0e0;
+    }
+    .user-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+    .login-prompt {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 15px;
+      padding: 2rem;
+      text-align: center;
+    }
+    .auth-loading {
+      min-height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-content {
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .page-content.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+<div th:replace="~{fragments/navbar :: navbar('users')}"></div>
+
+<main class="container mt-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1 class="display-6 fw-bold">REST API Upravljanje korisnicima</h1>
+      <p class="lead text-muted">CRUD operacije nad korisnicima s JWT autentifikacijom</p>
+    </div>
+  </div>
+
+  <div id="authRequired" class="login-prompt d-none">
+    <i class="bi bi-shield-lock" style="font-size: 3rem;"></i>
+    <h4 class="mt-3">Autentifikacija potrebna</h4>
+    <p>Za upravljanje korisnicima morate se prijaviti.</p>
+    <a href="/login" class="btn btn-light">
+      <i class="bi bi-box-arrow-in-right"></i> Prijavite se
+    </a>
+  </div>
+
+  <div id="userManagement" class="page-content d-none">
+    <div class="row mb-4">
+      <div class="col">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+          <i class="bi bi-plus-circle"></i> Dodaj korisnika
+        </button>
+      </div>
+    </div>
+
+    <div id="usersContainer">
+      <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Učitavanje korisnika...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-plus"></i> Dodaj novog korisnika</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addUserForm">
+          <div class="mb-3">
+            <label class="form-label">ID</label>
+            <input type="text" class="form-control" id="newUserId" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Ime</label>
+            <input type="text" class="form-control" id="newUserName" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Red ID</label>
+            <input type="text" class="form-control" id="newUserRedId" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Broj pratitelja</label>
+            <input type="number" class="form-control" id="newUserFollowers" value="0">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Broj bilješki</label>
+            <input type="number" class="form-control" id="newUserNotes" value="0">
+          </div>
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="newUserVerified">
+              <label class="form-check-label" for="newUserVerified">
+                Verificiran korisnik
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Odustani</button>
+        <button type="button" class="btn btn-primary" onclick="createUser()">Stvori</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-gear"></i> Uredi korisnika</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editUserForm">
+          <input type="hidden" id="editUserId">
+          <div class="mb-3">
+            <label class="form-label">Ime</label>
+            <input type="text" class="form-control" id="editUserName" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Red ID</label>
+            <input type="text" class="form-control" id="editUserRedId" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Broj pratitelja</label>
+            <input type="number" class="form-control" id="editUserFollowers">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Broj bilješki</label>
+            <input type="number" class="form-control" id="editUserNotes">
+          </div>
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editUserVerified">
+              <label class="form-check-label" for="editUserVerified">
+                Verificiran korisnik
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Odustani</button>
+        <button type="button" class="btn btn-primary" onclick="updateUser()">Spremi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+<script>
+  let accessToken = localStorage.getItem('accessToken');
+  let refreshToken = localStorage.getItem('refreshToken');
+
+  function updateAuthUI() {
+    if (accessToken) {
+      validateToken().then(isValid => {
+        if (isValid) {
+          showAuthenticatedState();
+          loadUsers();
+        } else {
+          attemptTokenRefresh().then(refreshed => {
+            if (refreshed) {
+              showAuthenticatedState();
+              loadUsers();
+            } else {
+              showUnauthenticatedState();
+            }
+          });
+        }
+      });
+    } else {
+      showUnauthenticatedState();
+    }
+  }
+
+  function showAuthenticatedState() {
+    $('#authRequired').addClass('d-none');
+    $('#userManagement').removeClass('d-none').addClass('show');
+    $('#auth-section').addClass('d-none');
+    $('#user-section').removeClass('d-none');
+
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      $('#username').text(payload.sub || 'Korisnik');
+    } catch (e) {
+      console.error('Error parsing token:', e);
+      logout();
+    }
+  }
+
+  function showUnauthenticatedState() {
+    $('#authRequired').removeClass('d-none');
+    $('#userManagement').addClass('d-none').removeClass('show');
+    $('#auth-section').removeClass('d-none');
+    $('#user-section').addClass('d-none');
+  }
+
+  function validateToken() {
+    if (!accessToken) return Promise.resolve(false);
+
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      const now = Date.now() / 1000;
+      if (payload.exp < now) {
+        return Promise.resolve(false);
+      }
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+
+    return fetch('/rest/users', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    })
+            .then(response => response.ok)
+            .catch(() => false);
+  }
+
+  function attemptTokenRefresh() {
+    if (!refreshToken) {
+      return Promise.resolve(false);
+    }
+
+    return fetch('/auth/refreshToken', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ token: refreshToken })
+    })
+            .then(response => {
+              if (response.ok) {
+                return response.json();
+              }
+              throw new Error('Refresh failed');
+            })
+            .then(data => {
+              accessToken = data.accessToken;
+              localStorage.setItem('accessToken', accessToken);
+              return true;
+            })
+            .catch(() => {
+              refreshToken = null;
+              localStorage.removeItem('refreshToken');
+              return false;
+            });
+  }
+
+  function makeAuthenticatedRequest(url, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers
+    };
+
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    return fetch(url, {
+      ...options,
+      headers
+    }).then(response => {
+      if (response.status === 401 && refreshToken) {
+        return attemptTokenRefresh().then(refreshed => {
+          if (refreshed) {
+            headers['Authorization'] = `Bearer ${accessToken}`;
+            return fetch(url, { ...options, headers });
+          }
+          throw new Error('Authentication failed');
+        });
+      }
+      return response;
+    });
+  }
+
+  function logout() {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    accessToken = null;
+    refreshToken = null;
+    showUnauthenticatedState();
+    toastr.info('Sesija je istekla');
+  }
+
+  function loadUsers() {
+    const container = document.getElementById('usersContainer');
+    container.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Učitavanje korisnika...</span>
+            </div>
+        </div>
+    `;
+
+    makeAuthenticatedRequest('/rest/users')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Greška prilikom dohvaćanja korisnika');
+              }
+              return response.json();
+            })
+            .then(users => {
+              displayUsers(users);
+            })
+            .catch(error => {
+              console.error('Error loading users:', error);
+              toastr.error('Greška prilikom učitavanja korisnika');
+              container.innerHTML = `
+            <div class="text-center text-danger py-5">
+                <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
+                <h5 class="mt-3">Greška prilikom učitavanja</h5>
+                <button class="btn btn-outline-primary" onclick="loadUsers()">
+                    <i class="bi bi-arrow-repeat"></i> Pokušaj ponovno
+                </button>
+            </div>
+        `;
+            });
+  }
+
+  function displayUsers(users) {
+    const container = document.getElementById('usersContainer');
+
+    if (users.length === 0) {
+      container.innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-people" style="font-size: 3rem;"></i>
+                <h5 class="mt-3">Nema korisnika</h5>
+                <p>Dodajte prvog korisnika klikom na gumb "Dodaj korisnika"</p>
+            </div>
+        `;
+      return;
+    }
+
+    let html = '<div class="row g-3">';
+    users.forEach(user => {
+      html += `
+            <div class="col-md-6 col-lg-4">
+                <div class="user-card card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">${escapeHtml(user.name)}</h6>
+                        ${user.verified ? '<span class="badge bg-warning"><i class="bi bi-check-circle"></i></span>' : ''}
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">ID: ${escapeHtml(user.id)}</p>
+                        <p class="text-muted small mb-3">Red ID: ${escapeHtml(user.redId)}</p>
+
+                        <p class="mb-1">Pratitelji: ${formatNumber(user.followersCount || 0)}</p>
+                        <p class="mb-0">Bilješke: ${user.notesCount || 0}</p>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-sm btn-outline-primary" onclick="editUser('${user.id}')">
+                            <i class="bi bi-pencil"></i> Uredi
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${user.id}', '${escapeForJs(user.name)}')">
+                            <i class="bi bi-trash"></i> Obriši
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+  }
+
+  function createUser() {
+    const userData = {
+      id: document.getElementById('newUserId').value,
+      name: document.getElementById('newUserName').value,
+      redId: document.getElementById('newUserRedId').value,
+      followersCount: parseInt(document.getElementById('newUserFollowers').value) || 0,
+      notesCount: parseInt(document.getElementById('newUserNotes').value) || 0,
+      verified: document.getElementById('newUserVerified').checked
+    };
+
+    makeAuthenticatedRequest('/rest/users', {
+      method: 'POST',
+      body: JSON.stringify(userData)
+    })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Greška prilikom stvaranja korisnika');
+              }
+              return response.json();
+            })
+            .then(() => {
+              toastr.success('Korisnik uspješno stvoren');
+              bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+              document.getElementById('addUserForm').reset();
+              loadUsers();
+            })
+            .catch(error => {
+              console.error('Error creating user:', error);
+              toastr.error('Greška prilikom stvaranja korisnika');
+            });
+  }
+
+  function editUser(userId) {
+    makeAuthenticatedRequest(`/rest/users/${userId}`)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Korisnik nije pronađen');
+              }
+              return response.json();
+            })
+            .then(user => {
+              document.getElementById('editUserId').value = user.id;
+              document.getElementById('editUserName').value = user.name;
+              document.getElementById('editUserRedId').value = user.redId;
+              document.getElementById('editUserFollowers').value = user.followersCount || 0;
+              document.getElementById('editUserNotes').value = user.notesCount || 0;
+              document.getElementById('editUserVerified').checked = user.verified || false;
+
+              new bootstrap.Modal(document.getElementById('editUserModal')).show();
+            })
+            .catch(error => {
+              console.error('Error loading user:', error);
+              toastr.error('Greška prilikom učitavanja korisnika');
+            });
+  }
+
+  function updateUser() {
+    const userId = document.getElementById('editUserId').value;
+    const userData = {
+      id: userId,
+      name: document.getElementById('editUserName').value,
+      redId: document.getElementById('editUserRedId').value,
+      followersCount: parseInt(document.getElementById('editUserFollowers').value) || 0,
+      notesCount: parseInt(document.getElementById('editUserNotes').value) || 0,
+      verified: document.getElementById('editUserVerified').checked
+    };
+
+    makeAuthenticatedRequest(`/rest/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData)
+    })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Greška prilikom ažuriranja korisnika');
+              }
+              return response.json();
+            })
+            .then(() => {
+              toastr.success('Korisnik uspješno ažuriran');
+              bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
+              loadUsers();
+            })
+            .catch(error => {
+              console.error('Error updating user:', error);
+              toastr.error('Greška prilikom ažuriranja korisnika');
+            });
+  }
+
+  function deleteUser(userId, userName) {
+    if (!confirm(`Jeste li sigurni da želite obrisati korisnika "${userName}"?`)) {
+      return;
+    }
+
+    makeAuthenticatedRequest(`/rest/users/${userId}`, {
+      method: 'DELETE'
+    })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Greška prilikom brisanja korisnika');
+              }
+              toastr.success('Korisnik uspješno obrisan');
+              loadUsers();
+            })
+            .catch(error => {
+              console.error('Error deleting user:', error);
+              toastr.error('Greška prilikom brisanja korisnika');
+            });
+  }
+
+  function formatNumber(num) {
+    if (num >= 10000) {
+      return (num / 10000).toFixed(1) + 'w';
+    }
+    return num.toLocaleString();
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function escapeForJs(text) {
+    return text.replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+  }
+
+  toastr.options = {
+    "closeButton": true,
+    "progressBar": true,
+    "positionClass": "toast-top-right",
+    "timeOut": "5000"
+  };
+
+  $(document).ready(function() {
+    updateAuthUI();
+  });
+</script>
+</body>
+</html>

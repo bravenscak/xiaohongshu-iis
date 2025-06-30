@@ -65,68 +65,7 @@
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container">
-        <a class="navbar-brand" href="/">
-            Xiaohongshu IIS
-        </a>
-
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="/"><i class="bi bi-house"></i> Dashboard</a>
-                </li>
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-code-square"></i> XML Servisi
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/xml-validation">
-                            <i class="bi bi-check-circle"></i> XML Validacija
-                        </a></li>
-                        <li><a class="dropdown-item" href="/soap-search">
-                            <i class="bi bi-search"></i> SOAP Pretraživanje
-                        </a></li>
-                    </ul>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link active" href="/weather">
-                        <i class="bi bi-cloud-sun"></i> Vrijeme
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/users">
-                        <i class="bi bi-people"></i> Korisnici
-                    </a>
-                </li>
-            </ul>
-
-            <ul class="navbar-nav">
-                <li class="nav-item" id="auth-section">
-                    <a class="nav-link" href="/login">
-                        <i class="bi bi-box-arrow-in-right"></i> Prijava
-                    </a>
-                </li>
-                <li class="nav-item d-none" id="user-section">
-                    <div class="dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person"></i> <span id="username"></span>
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="#" onclick="logout()">
-                                <i class="bi bi-box-arrow-right"></i> Odjava
-                            </a></li>
-                        </ul>
-                    </div>
-                </li>
-            </ul>
-        </div>
-    </div>
-</nav>
+<div th:replace="~{fragments/navbar :: navbar('weather')}"></div>
 
 <main class="container mt-4">
     <div class="row mb-4">
@@ -168,33 +107,71 @@
 
 <script>
     let accessToken = localStorage.getItem('accessToken');
-    let refreshToken = localStorage.getItem('refreshToken');
+    let refreshToken = null;
 
     function updateAuthUI() {
         if (accessToken) {
-            $('#auth-section').addClass('d-none');
-            $('#user-section').removeClass('d-none');
+            validateToken().then(isValid => {
+                if (isValid) {
+                    $('#auth-section').addClass('d-none');
+                    $('#user-section').removeClass('d-none');
 
-            try {
-                const payload = JSON.parse(atob(accessToken.split('.')[1]));
-                $('#username').text(payload.sub || 'Korisnik');
-            } catch (e) {
-                console.error('Error parsing token:', e);
-            }
+                    try {
+                        const payload = JSON.parse(atob(accessToken.split('.')[1]));
+                        $('#username').text(payload.sub || 'Korisnik');
+                    } catch (e) {
+                        console.error('Error parsing token:', e);
+                        logout();
+                    }
+                } else {
+                    attemptTokenRefresh().then(refreshed => {
+                        if (refreshed) {
+                            updateAuthUI();
+                        } else {
+                            logout();
+                        }
+                    });
+                }
+            });
         } else {
             $('#auth-section').removeClass('d-none');
             $('#user-section').addClass('d-none');
         }
     }
 
+    function validateToken() {
+        if (!accessToken) return Promise.resolve(false);
+
+        try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            const now = Date.now() / 1000;
+            if (payload.exp < now) {
+                return Promise.resolve(false);
+            }
+        } catch (e) {
+            return Promise.resolve(false);
+        }
+
+        return fetch('/rest/users', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        })
+            .then(response => response.ok)
+            .catch(() => false);
+    }
+
     function logout() {
         localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
         accessToken = null;
-        refreshToken = null;
-        updateAuthUI();
-        toastr.success('Uspješno ste se odjavili');
-        window.location.href = '/';
+        $('#auth-section').removeClass('d-none');
+        $('#user-section').addClass('d-none');
+
+        if (window.location.pathname === '/users') {
+            window.location.href = '/login';
+        } else {
+            toastr.success('Uspješno ste se odjavili');
+        }
     }
 
     const cityInput = document.getElementById('cityInput');
@@ -331,7 +308,6 @@
         `;
 
         weatherData.forEach((weather, index) => {
-            // Kreiraj XML reprezentaciju
             let xmlData = '<weather>\n';
             Object.keys(weather).forEach(key => {
                 xmlData += `  <${key}>${weather[key]}</${key}>\n`;
@@ -392,48 +368,6 @@
         `;
     }
 
-    function showWeatherDetails(index) {
-        const weather = window.currentWeatherData[index];
-
-        // Kreiraj XML reprezentaciju
-        let xmlData = '<weather>\n';
-        Object.keys(weather).forEach(key => {
-            xmlData += `  <${key}>${weather[key]}</${key}>\n`;
-        });
-        xmlData += '</weather>';
-
-        const modal = document.createElement('div');
-        modal.innerHTML = `
-            <div class="modal fade" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-code-square"></i> XML Response - ${weather.city}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="xml-output">${escapeHtml(xmlData)}</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard(\`${xmlData.replace(/`/g, '\\`')}\`)">
-                                <i class="bi bi-clipboard"></i> Kopiraj XML
-                            </button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-        const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
-        bsModal.show();
-
-        modal.addEventListener('hidden.bs.modal', () => {
-            document.body.removeChild(modal);
-        });
-    }
-
     function showXmlRpcResponse() {
         if (!window.currentWeatherData) return;
 
@@ -460,6 +394,12 @@
                         </div>
                         <div class="modal-body">
                             <div class="xml-output">${escapeHtml(xmlResponse)}</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard(\`${xmlResponse.replace(/`/g, '\\`')}\`)">
+                                <i class="bi bi-clipboard"></i> Kopiraj XML
+                            </button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
                         </div>
                     </div>
                 </div>
@@ -495,10 +435,6 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
-    }
-
-    function escapeForJs(text) {
-        return text.replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r');
     }
 
     toastr.options = {

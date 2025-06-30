@@ -83,68 +83,7 @@
   </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-  <div class="container">
-    <a class="navbar-brand" href="/">
-      Xiaohongshu IIS
-    </a>
-
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav me-auto">
-        <li class="nav-item">
-          <a class="nav-link" href="/"><i class="bi bi-house"></i> Dashboard</a>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle active" href="#" role="button" data-bs-toggle="dropdown">
-            <i class="bi bi-code-square"></i> XML Servisi
-          </a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="/xml-validation">
-              <i class="bi bi-check-circle"></i> XML Validacija
-            </a></li>
-            <li><a class="dropdown-item active" href="/soap-search">
-              <i class="bi bi-search"></i> SOAP Pretraživanje
-            </a></li>
-          </ul>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="/weather">
-            <i class="bi bi-cloud-sun"></i> Vrijeme
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="/users">
-            <i class="bi bi-people"></i> Korisnici
-          </a>
-        </li>
-      </ul>
-
-      <ul class="navbar-nav">
-        <li class="nav-item" id="auth-section">
-          <a class="nav-link" href="/login">
-            <i class="bi bi-box-arrow-in-right"></i> Prijava
-          </a>
-        </li>
-        <li class="nav-item d-none" id="user-section">
-          <div class="dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-              <i class="bi bi-person"></i> <span id="username"></span>
-            </a>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="#" onclick="logout()">
-                <i class="bi bi-box-arrow-right"></i> Odjava
-              </a></li>
-            </ul>
-          </div>
-        </li>
-      </ul>
-    </div>
-  </div>
-</nav>
+<div th:replace="~{fragments/navbar :: navbar('soap-search')}"></div>
 
 <main class="container mt-4">
   <div class="row mb-4">
@@ -209,33 +148,71 @@
 
 <script>
   let accessToken = localStorage.getItem('accessToken');
-  let refreshToken = localStorage.getItem('refreshToken');
+  let refreshToken = null;
 
   function updateAuthUI() {
     if (accessToken) {
-      $('#auth-section').addClass('d-none');
-      $('#user-section').removeClass('d-none');
+      validateToken().then(isValid => {
+        if (isValid) {
+          $('#auth-section').addClass('d-none');
+          $('#user-section').removeClass('d-none');
 
-      try {
-        const payload = JSON.parse(atob(accessToken.split('.')[1]));
-        $('#username').text(payload.sub || 'Korisnik');
-      } catch (e) {
-        console.error('Error parsing token:', e);
-      }
+          try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            $('#username').text(payload.sub || 'Korisnik');
+          } catch (e) {
+            console.error('Error parsing token:', e);
+            logout();
+          }
+        } else {
+          attemptTokenRefresh().then(refreshed => {
+            if (refreshed) {
+              updateAuthUI();
+            } else {
+              logout();
+            }
+          });
+        }
+      });
     } else {
       $('#auth-section').removeClass('d-none');
       $('#user-section').addClass('d-none');
     }
   }
 
+  function validateToken() {
+    if (!accessToken) return Promise.resolve(false);
+
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      const now = Date.now() / 1000;
+      if (payload.exp < now) {
+        return Promise.resolve(false);
+      }
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+
+    return fetch('/rest/users', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    })
+            .then(response => response.ok)
+            .catch(() => false);
+  }
+
   function logout() {
     localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
     accessToken = null;
-    refreshToken = null;
-    updateAuthUI();
-    toastr.success('Uspješno ste se odjavili');
-    window.location.href = '/';
+    $('#auth-section').removeClass('d-none');
+    $('#user-section').addClass('d-none');
+
+    if (window.location.pathname === '/users') {
+      window.location.href = '/login';
+    } else {
+      toastr.success('Uspješno ste se odjavili');
+    }
   }
 
   const searchInput = document.getElementById('searchInput');
@@ -369,32 +346,6 @@
     toastr.success(`SOAP poziv uspješan - ${users.length} rezultat(a)`);
   }
 
-  function parseUserFromXml(xmlString) {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
-
-    return {
-      id: getXmlValue(xmlDoc, 'id'),
-      name: getXmlValue(xmlDoc, 'name'),
-      redId: getXmlValue(xmlDoc, 'redId'),
-      followersCount: parseInt(getXmlValue(xmlDoc, 'followersCount')) || 0,
-      notesCount: parseInt(getXmlValue(xmlDoc, 'notesCount')) || 0,
-      verified: getXmlValue(xmlDoc, 'verified') === 'true'
-    };
-  }
-
-  function getXmlValue(xmlDoc, tagName) {
-    const element = xmlDoc.getElementsByTagName(tagName)[0];
-    return element ? element.textContent : '';
-  }
-
-  function formatNumber(num) {
-    if (num >= 10000) {
-      return (num / 10000).toFixed(1) + 'w';
-    }
-    return num.toLocaleString();
-  }
-
   function showNoResults(searchTerm) {
     searchResults.innerHTML = `
             <div class="text-center text-muted py-5">
@@ -419,83 +370,6 @@
                 </button>
             </div>
         `;
-  }
-
-  function showUserXml(index) {
-    const user = window.soapResults[index];
-    const xmlContent = user.textContent;
-
-    const modal = document.createElement('div');
-    modal.innerHTML = `
-            <div class="modal fade" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-code-square"></i> XML Korisnika</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="xml-output">${escapeHtml(xmlContent)}</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('${escapeForJs(xmlContent)}')">
-                                <i class="bi bi-clipboard"></i> Kopiraj
-                            </button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-    document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
-    bsModal.show();
-
-    modal.addEventListener('hidden.bs.modal', () => {
-      document.body.removeChild(modal);
-    });
-  }
-
-  function showSoapResponse() {
-    if (!window.soapResults) return;
-
-    let allXml = '<?xml version="1.0" encoding="UTF-8"?>\n<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="http://xiaohongshuiis.algebra.hr/soap">\n  <soap:Body>\n    <tns:searchUsersResponse>\n      <tns:results>\n';
-    Array.from(window.soapResults).forEach(user => {
-      allXml += '        <tns:user>' + user.textContent + '</tns:user>\n';
-    });
-    allXml += '      </tns:results>\n    </tns:searchUsersResponse>\n  </soap:Body>\n</soap:Envelope>';
-
-    const modal = document.createElement('div');
-    modal.innerHTML = `
-            <div class="modal fade" tabindex="-1">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-code-square"></i> SOAP Response XML</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="xml-output" style="max-height: 500px;">${escapeHtml(allXml)}</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('${escapeForJs(allXml)}')">
-                                <i class="bi bi-clipboard"></i> Kopiraj
-                            </button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-    document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
-    bsModal.show();
-
-    modal.addEventListener('hidden.bs.modal', () => {
-      document.body.removeChild(modal);
-    });
   }
 
   function copyToClipboard(text) {
@@ -570,44 +444,9 @@
                             <div class="xml-output" style="max-height: 400px;">${escapeHtml(xmlContent)}</div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-    document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
-    bsModal.show();
-  }
-
-  function showXmlModal(xmlContent, validationMessages) {
-    const isValid = validationMessages.some(msg => msg.includes('valid according to XSD'));
-    const validationClass = isValid ? 'alert-success' : 'alert-warning';
-    const validationIcon = isValid ? 'bi-check-circle' : 'bi-info-circle';
-
-    const modal = document.createElement('div');
-    modal.innerHTML = `
-            <div class="modal fade" tabindex="-1">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-gear"></i> Generirani XML i JAXB Validacija</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="alert ${validationClass}">
-                                <h6><i class="bi ${validationIcon}"></i> JAXB Validacija rezultat:</h6>
-                                <ul class="mb-0">
-                                    ${validationMessages.map(msg => `<li>${msg}</li>`).join('')}
-                                </ul>
-                            </div>
-
-                            <h6>Generirani XML (koristi se za XPath pretraživanje):</h6>
-                            <div class="xml-output" style="max-height: 400px;">${escapeHtml(xmlContent)}</div>
-                        </div>
-                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('${escapeForJs(xmlContent)}')">
+                                <i class="bi bi-clipboard"></i> Kopiraj XML
+                            </button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
                         </div>
                     </div>
@@ -623,44 +462,6 @@
       document.body.removeChild(modal);
     });
   }
-  const isValid = validationMessages.some(msg => msg.includes('valid according to XSD'));
-  const validationClass = isValid ? 'alert-success' : 'alert-warning';
-  const validationIcon = isValid ? 'bi-check-circle' : 'bi-info-circle';
-
-  const modal = document.createElement('div');
-  modal.innerHTML = `
-            <div class="modal fade" tabindex="-1">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-gear"></i> Generirani XML i JAXB Validacija</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="alert ${validationClass}">
-                                <h6><i class="bi ${validationIcon}"></i> JAXB Validacija rezultat:</h6>
-                                <ul class="mb-0">
-                                    ${validationMessages.map(msg => `<li>${msg}</li>`).join('')}
-                                </ul>
-                            </div>
-
-                            <h6>Generirani XML (koristi se za XPath pretraživanje):</h6>
-                            <div class="xml-output" style="max-height: 400px;">${escapeHtml(xmlContent)}</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('${escapeForJs(xmlContent)}')">
-                                <i class="bi bi-clipboard"></i> Kopiraj XML
-                            </button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Zatvori</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-  document.body.appendChild(modal);
-  const bsModal = new bootstrap.Modal(modal.querySelector('.modal'));
-  bsModal.show();
 
   $(document).ready(function() {
     updateAuthUI();
