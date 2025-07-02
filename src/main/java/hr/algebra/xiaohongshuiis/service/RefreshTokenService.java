@@ -26,17 +26,15 @@ public class RefreshTokenService {
 
         if (existingRefreshToken.isPresent()) {
             RefreshToken token = existingRefreshToken.get();
-            if (token.getExpiryDate().compareTo(Instant.now()) > 0) {
-                return token;
-            } else {
-                refreshTokenRepository.delete(token);
-            }
+            token.setToken(UUID.randomUUID().toString());
+            token.setExpiryDate(Instant.now().plusMillis(600000));
+            return refreshTokenRepository.save(token);
         }
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUserInfo(appUserRepository.findByName(username));
         refreshToken.setToken(UUID.randomUUID().toString());
-        refreshToken.setExpiryDate(Instant.now().plusMillis(600000)); // 10 minutes
+        refreshToken.setExpiryDate(Instant.now().plusMillis(600000));
 
         return refreshTokenRepository.save(refreshToken);
     }
